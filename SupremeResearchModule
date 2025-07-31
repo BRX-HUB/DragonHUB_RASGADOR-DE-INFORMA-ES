@@ -1,0 +1,410 @@
+local SupremeResearchModule = {}
+
+-- Metadados do módulo
+SupremeResearchModule.Info = {
+    Name = "SupremeResearchModule",
+    Version = "1.1.0",
+    Author = "DragonMODS",
+    Description = "Módulo supremo para capturar todas as informações do jogo e do Roblox Studio, sem limites ou filtros",
+    LastUpdate = os.time(),
+    Dependencies = {"HttpService", "Players", "game"}
+}
+
+-- Configurações do módulo
+SupremeResearchModule.Config = {
+    logChanges = true,              -- Registrar mudanças
+    saveData = true,                -- Salvar dados coletados
+    useHttpService = true,          -- Usar HttpService para APIs externas
+    includePlayerInfo = true,       -- Incluir informações de jogadores
+    markEncryptedFiles = true       -- Marcar arquivos encriptados para desofuscação
+}
+
+-- Tabelas para armazenar dados coletados
+local GameData = {
+    scripts = {},           -- Scripts (LocalScripts, ServerScripts, ModuleScripts)
+    instances = {},         -- Instâncias (Part, Model, NPC, etc.)
+    players = {},           -- Informações de jogadores
+    services = {},          -- Serviços do Roblox
+    studioConfig = {},      -- Configurações do Roblox Studio
+    encryptedFiles = {},    -- Arquivos encriptados marcados
+    fragments = {}          -- Fragmentos do IterativeReverseDeobfuscationModule
+}
+
+-- Função para carregar fragmentos do módulo anterior
+local HttpService = game:GetService("HttpService")
+local function loadPreviousModule()
+    local url = "https://raw.githubusercontent.com/BRX-HUB/DragonHUB_RASGADOR-DE-INFORMA-ES/refs/heads/main/IterativeReverseDeobfuscationModule.lua"
+    local success, response = pcall(function()
+        return game:HttpGet(url, true)
+    end)
+    if not success then
+        warn("Erro ao carregar IterativeReverseDeobfuscationModule: " .. tostring(response))
+        return nil
+    end
+    local moduleFunc, loadError = loadstring(response)
+    if not moduleFunc then
+        warn("Erro ao compilar IterativeReverseDeobfuscationModule: " .. tostring(loadError))
+        return nil
+    end
+    local module, execError = pcall(moduleFunc)
+    if not module then
+        warn("Erro ao executar IterativeReverseDeobfuscationModule: " .. tostring(execError))
+        return nil
+    end
+    return module
+end
+
+-- Função auxiliar para registrar mudanças
+local function logChange(changes, changeType, details)
+    if SupremeResearchModule.Config.logChanges then
+        table.insert(changes, {
+            type = changeType,
+            details = details or {},
+            timestamp = os.time()
+        })
+    end
+end
+
+-- Função para salvar dados coletados
+local function saveData(dataType, data)
+    if SupremeResearchModule.Config.saveData then
+        GameData[dataType] = GameData[dataType] or {}
+        table.insert(GameData[dataType], {
+            data = data,
+            timestamp = os.time()
+        })
+    end
+end
+
+-- Função para capturar todos os scripts
+function SupremeResearchModule:CaptureScripts()
+    local changes = {}
+    for _, descendant in ipairs(game:GetDescendants()) do
+        if descendant:IsA("BaseScript") or descendant:IsA("ModuleScript") then
+            local scriptType = descendant:IsA("LocalScript") and "LocalScript" or
+                              descendant:IsA("ModuleScript") and "ModuleScript" or "ServerScript"
+            local scriptData = {
+                name = descendant.Name,
+                path = descendant:GetFullName(),
+                disabled = descendant.Disabled,
+                runContext = tostring(descendant.RunContext),
+                source = nil
+            }
+            local success, source = pcall(function()
+                return descendant.Source
+            end)
+            if success and source then
+                scriptData.source = source -- Sem limite de caracteres
+                if self.Config.markEncryptedFiles then
+                    local isEncrypted = self:IsPotentiallyEncrypted(source)
+                    if isEncrypted then
+                        table.insert(GameData.encryptedFiles, {
+                            path = scriptData.path,
+                            source = scriptData.source
+                        })
+                    end
+                end
+            else
+                scriptData.source = "Source inaccessible"
+            end
+            saveData("scripts", scriptData)
+            logChange(changes, "script_captured", scriptData)
+        end
+    end
+    return changes
+end
+
+-- Função para verificar se o código é potencialmente encriptado
+function SupremeResearchModule:IsPotentiallyEncrypted(source)
+    local patterns = {
+        "string%.char%(",       -- Uso de string.char
+        "[A-Z2-7]+",            -- Base32
+        "==%w+",                -- Base64
+        "%-%-%[=*%[.-%]=*%]%s*", -- Comentários de ruído
+        "loadstring%(",         -- Uso de loadstring
+        "syn%.crypt"            -- Synapse encryption
+    }
+    for _, pattern in ipairs(patterns) do
+        if string.find(source, pattern) then
+            return true
+        end
+    end
+    return false
+end
+
+-- Função para capturar todas as instâncias
+function SupremeResearchModule:CaptureInstances()
+    local changes = {}
+    for _, descendant in ipairs(game:GetDescendants()) do
+        if descendant:IsA("BasePart") or descendant:IsA("Model") or descendant:IsA("Humanoid") then
+            local instanceData = {
+                name = descendant.Name,
+                path = descendant:GetFullName(),
+                class = descendant.ClassName,
+                properties = {}
+            }
+            -- Propriedades físicas
+            if descendant:IsA("BasePart") then
+                instanceData.properties.size = tostring(descendant.Size)
+                instanceData.properties.mass = descendant:GetMass()
+                instanceData.properties.position = tostring(descendant.Position)
+                instanceData.properties.orientation = tostring(descendant.Orientation)
+                instanceData.properties.material = tostring(descendant.Material)
+                instanceData.properties.canCollide = descendant.CanCollide
+                instanceData.properties.anchored = descendant.Anchored
+            end
+            -- Propriedades de NPCs
+            if descendant:IsA("Humanoid") then
+                instanceData.properties.health = descendant.Health
+                instanceData.properties.maxHealth = descendant.MaxHealth
+                instanceData.properties.walkSpeed = descendant.WalkSpeed
+                instanceData.properties.jumpPower = descendant.JumpPower
+                instanceData.properties.displayName = descendant.DisplayName
+            end
+            saveData("instances", instanceData)
+            logChange(changes, "instance_captured", instanceData)
+        end
+    end
+    return changes
+end
+
+-- Função para capturar informações de jogadores
+function SupremeResearchModule:CapturePlayerInfo(nicknames)
+    local changes = {}
+    local Players = game:GetService("Players")
+    -- Capturar jogadores online
+    for _, player in ipairs(Players:GetPlayers()) do
+        local playerData = {
+            nickname = player.Name,
+            userId = player.UserId,
+            displayName = player.DisplayName,
+            accountAge = player.AccountAge,
+            membershipType = tostring(player.MembershipType),
+            character = player.Character and player.Character:GetFullName() or "No character",
+            backpack = {}
+        }
+        -- Capturar ferramentas no backpack
+        if player.Backpack then
+            for _, tool in ipairs(player.Backpack:GetChildren()) do
+                table.insert(playerData.backpack, {
+                    name = tool.Name,
+                    class = tool.ClassName
+                })
+            end
+        end
+        -- Capturar informações adicionais via HttpService
+        if self.Config.useHttpService then
+            local success, profileData = pcall(function()
+                local response = HttpService:GetAsync("https://users.roblox.com/v1/users/" .. player.UserId)
+                return HttpService:JSONDecode(response)
+            end)
+            if success and profileData then
+                playerData.profile = {
+                    description = profileData.description,
+                    created = profileData.created,
+                    isBanned = profileData.isBanned
+                }
+            end
+        end
+        saveData("players", playerData)
+        logChange(changes, "player_captured", playerData)
+    end
+    -- Capturar informações de jogadores offline por nicknames fornecidos
+    for _, nickname in ipairs(nicknames or {}) do
+        local success, userId = pcall(function()
+            return Players:GetUserIdFromNameAsync(nickname)
+        end)
+        if success and userId then
+            local playerData = {
+                nickname = nickname,
+                userId = userId,
+                profile = {}
+            }
+            if self.Config.useHttpService then
+                local success, profileData = pcall(function()
+                    local response = HttpService:GetAsync("https://users.roblox.com/v1/users/" .. userId)
+                    return HttpService:JSONDecode(response)
+                end)
+                if success and profileData then
+                    playerData.profile = {
+                        description = profileData.description,
+                        created = profileData.created,
+                        isBanned = profileData.isBanned
+                    }
+                end
+            end
+            saveData("players", playerData)
+            logChange(changes, "offline_player_captured", playerData)
+        end
+    end
+    return changes
+end
+
+-- Função para capturar serviços do Roblox
+function SupremeResearchModule:CaptureServices()
+    local changes = {}
+    local services = {
+        "ReplicatedStorage", "ServerScriptService", "ServerStorage",
+        "Players", "HttpService", "Lighting", "SoundService",
+        "MarketplaceService", "StarterPlayer", "StarterGui", "StarterPack"
+    }
+    for _, serviceName in ipairs(services) do
+        local service = game:GetService(serviceName)
+        local serviceData = {
+            name = serviceName,
+            path = service:GetFullName(),
+            children = {}
+        }
+        for _, child in ipairs(service:GetChildren()) do
+            table.insert(serviceData.children, {
+                name = child.Name,
+                class = child.ClassName,
+                path = child:GetFullName()
+            })
+        end
+        saveData("services", serviceData)
+        logChange(changes, "service_captured", serviceData)
+    end
+    return changes
+end
+
+-- Função para capturar configurações do Roblox Studio
+function SupremeResearchModule:CaptureStudioConfig()
+    local changes = {}
+    local studioData = {
+        gameInfo = {
+            name = game.Name,
+            placeId = game.PlaceId,
+            creatorId = game.CreatorId,
+            creatorType = tostring(game.CreatorType)
+        },
+        workspace = {
+            gravity = game.Workspace.Gravity,
+            fallenPartsDestroyHeight = game.Workspace.FallenPartsDestroyHeight
+        },
+        lighting = {
+            ambient = tostring(game.Lighting.Ambient),
+            fogEnd = game.Lighting.FogEnd,
+            timeOfDay = game.Lighting.TimeOfDay
+        },
+        starterPlayer = {
+            cameraMode = tostring(game.StarterPlayer.CameraMode),
+            devTouchMovementMode = tostring(game.StarterPlayer.DevTouchMovementMode)
+        }
+    }
+    saveData("studioConfig", studioData)
+    logChange(changes, "studio_config_captured", studioData)
+    return changes
+end
+
+-- Função para capturar fragmentos do módulo anterior
+function SupremeResearchModule:CaptureFragments()
+    local changes = {}
+    local previousModule = loadPreviousModule()
+    if previousModule then
+        local fragments = previousModule:GetFragments()
+        for _, fragment in ipairs(fragments) do
+            saveData("fragments", fragment)
+            logChange(changes, "fragment_captured", fragment)
+        end
+    end
+    return changes
+end
+
+-- Função principal para capturar todas as informações
+function SupremeResearchModule:CaptureAll(nicknames)
+    local allChanges = {}
+    local startTime = os.time()
+
+    -- Capturar scripts
+    local scriptChanges = self:CaptureScripts()
+    for _, change in ipairs(scriptChanges) do
+        table.insert(allChanges, change)
+    end
+
+    -- Capturar instâncias
+    local instanceChanges = self:CaptureInstances()
+    for _, change in ipairs(instanceChanges) do
+        table.insert(allChanges, change)
+    end
+
+    -- Capturar informações de jogadores
+    if self.Config.includePlayerInfo then
+        local playerChanges = self:CapturePlayerInfo(nicknames or {})
+        for _, change in ipairs(playerChanges) do
+            table.insert(allChanges, change)
+        end
+    end
+
+    -- Capturar serviços
+    local serviceChanges = self:CaptureServices()
+    for _, change in ipairs(serviceChanges) do
+        table.insert(allChanges, change)
+    end
+
+    -- Capturar configurações do Studio
+    local studioChanges = self:CaptureStudioConfig()
+    for _, change in ipairs(studioChanges) do
+        table.insert(allChanges, change)
+    end
+
+    -- Capturar fragmentos do módulo anterior
+    local fragmentChanges = self:CaptureFragments()
+    for _, change in ipairs(fragmentChanges) do
+        table.insert(allChanges, change)
+    end
+
+    -- Gerar relatório supremo sem filtro
+    local report = {
+        gameData = GameData,
+        encryptedFiles = GameData.encryptedFiles,
+        statistics = {
+            scriptCount = #GameData.scripts,
+            instanceCount = #GameData.instances,
+            playerCount = #GameData.players,
+            serviceCount = #GameData.services,
+            fragmentCount = #GameData.fragments,
+            processingTime = os.time() - startTime
+        },
+        metadata = {
+            processedAt = os.time(),
+            moduleVersion = self.Info.Version
+        }
+    }
+
+    if self.Config.logChanges then
+        print("🔍 SupremeResearchModule v" .. self.Info.Version .. " - Pesquisa suprema concluída!")
+        print("Scripts encontrados: " .. #GameData.scripts)
+        print("Instâncias capturadas: " .. #GameData.instances)
+        print("Jogadores analisados: " .. #GameData.players)
+        print("Serviços mapeados: " .. #GameData.services)
+        print("Fragmentos coletados: " .. #GameData.fragments)
+        print("Arquivos encriptados marcados: " .. #GameData.encryptedFiles)
+    end
+
+    return report, allChanges
+end
+
+-- Função para obter dados coletados
+function SupremeResearchModule:GetGameData()
+    return GameData
+end
+
+-- Função para obter informações do módulo
+function SupremeResearchModule:GetInfo()
+    return self.Info
+end
+
+-- Log de inicialização
+if SupremeResearchModule.Config.logChanges then
+    print("🔍 SupremeResearchModule v" .. SupremeResearchModule.Info.Version .. " carregado!")
+    print("📋 Métodos disponíveis:")
+    for i, method in ipairs({
+        "CaptureScripts", "CaptureInstances", "CapturePlayerInfo",
+        "CaptureServices", "CaptureStudioConfig", "CaptureFragments"
+    }) do
+        print(string.format("   %d. %s", i, method))
+    end
+end
+
+return SupremeResearchModule
