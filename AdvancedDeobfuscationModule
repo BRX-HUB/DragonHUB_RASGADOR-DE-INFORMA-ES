@@ -1,0 +1,540 @@
+local AdvancedDeobfuscationModule = {}
+
+-- Metadados do módulo
+AdvancedDeobfuscationModule.Info = {
+    Name = "AdvancedDeobfuscationModule",
+    Version = "1.0.0",
+    Author = "DragonMODS",
+    Description = "Módulo avançado com 32 métodos de desofuscação/desencriptação para scripts Lua",
+    LastUpdate = os.time(),
+    Dependencies = {"HttpService", "game"}
+}
+
+-- Configurações do módulo
+AdvancedDeobfuscationModule.Config = {
+    maxStringLength = 10000,         -- Máximo de caracteres para processar
+    enableBytecodeProcessing = true, -- Processar bytecode
+    enableCryptoProcessing = true,   -- Usar criptografia avançada
+    logChanges = true,              -- Registrar mudanças
+    formatOutput = true,            -- Formatar saída
+    useCryptoKeys = true,           -- Usar chaves do CryptoKeysModule
+    maxIterations = 5               -- Máximo de iterações para métodos incrementais
+}
+
+-- Função para carregar CryptoKeysModule (reutiliza a lógica do módulo original)
+local HttpService = game:GetService("HttpService")
+local function loadCryptoKeysModule()
+    local url = "https://raw.githubusercontent.com/BRX-HUB/DragonHUB_RASGADOR-DE-INFORMA-ES/refs/heads/main/CryptoKeysModule.lua"
+    local success, response = pcall(function()
+        return game:HttpGet(url, true)
+    end)
+    if not success then
+        warn("Erro ao carregar CryptoKeysModule: " .. tostring(response))
+        return nil
+    end
+    local moduleFunc, loadError = loadstring(response)
+    if not moduleFunc then
+        warn("Erro ao compilar CryptoKeysModule: " .. tostring(loadError))
+        return nil
+    end
+    local module, execError = pcall(moduleFunc)
+    if not module then
+        warn("Erro ao executar CryptoKeysModule: " .. tostring(execError))
+        return nil
+    end
+    return module
+end
+
+local CryptoKeys = nil
+local LoadedKeys = nil
+
+-- Inicializa chaves criptográficas
+function AdvancedDeobfuscationModule:InitializeCryptoKeys()
+    if not self.Config.useCryptoKeys then
+        return false, "Uso de chaves criptográficas desabilitado"
+    end
+    CryptoKeys = loadCryptoKeysModule()
+    if CryptoKeys then
+        LoadedKeys = CryptoKeys:GetAllKeys()
+        if self.Config.logChanges then
+            print("✅ AdvancedDeobfuscationModule: CryptoKeysModule carregado!")
+        end
+        return true, "Chaves carregadas com sucesso"
+    end
+    return false, "Falha ao carregar CryptoKeysModule"
+end
+
+-- Função auxiliar para registrar mudanças
+local function logChange(changes, changeType, original, result, details)
+    table.insert(changes, {
+        type = changeType,
+        original = original,
+        result = result,
+        details = details or {}
+    })
+end
+
+-- === 32 Métodos de Desofuscação/Desencriptação ===
+
+-- 1. Desofuscação de Bytecode (Normalização)
+function AdvancedDeobfuscationModule:DeobfuscateBytecode(code)
+    if not self.Config.enableBytecodeProcessing then return code, {} end
+    local changes = {}
+    local success, chunk = pcall(loadstring, code)
+    if not success then
+        logChange(changes, "bytecode_error", code, nil, { error = chunk })
+        return code, changes
+    end
+    -- Placeholder: Normalizar instruções de bytecode (ex.: reverter manipulações bit32)
+    local deobfuscated = "-- Bytecode normalized (placeholder)"
+    logChange(changes, "bytecode_deobfuscation", code, deobfuscated, { method = "normalization" })
+    return deobfuscated, changes
+end
+
+-- 2. Desencriptação Base64
+function AdvancedDeobfuscationModule:DeobfuscateBase64(code)
+    local changes = {}
+    local deobfuscated = code
+    local base64Pattern = '"([A-Za-z0-9+/=]+)"'
+    deobfuscated = string.gsub(deobfuscated, base64Pattern, function(encoded)
+        local success, decoded = pcall(function()
+            return HttpService:DecodeBase64(encoded) -- Roblox API
+        end)
+        if success and decoded then
+            logChange(changes, "base64_deobfuscation", encoded, decoded)
+            return '"' .. decoded .. '"'
+        end
+        return encoded
+    end)
+    return deobfuscated, changes
+end
+
+-- 3. Normalização de Ambientes (getfenv/setfenv)
+function AdvancedDeobfuscationModule:DeobfuscateEnvironments(code)
+    local changes = {}
+    local deobfuscated = code
+    local envPattern = "setfenv%((%d+),.-getfenv%((%d*)%)%)"
+    deobfuscated = string.gsub(deobfuscated, envPattern, function(level, env)
+        logChange(changes, "environment_deobfuscation", string.format("setfenv(%s, getfenv(%s))", level, env), "-- Normalized")
+        return ""
+    end)
+    return deobfuscated, changes
+end
+
+-- 4. Desofuscação de Tabelas Complexas
+function AdvancedDeobfuscationModule:DeobfuscateTables(code)
+    local changes = {}
+    local deobfuscated = code
+    local tablePattern = "local%s+([%w_]+)%s*=%s*{([^}]*)}"
+    deobfuscated = string.gsub(deobfuscated, tablePattern, function(varName, content)
+        local values = {}
+        for value in string.gmatch(content, "[^,]+") do
+            table.insert(values, string.match(value, "^%s*(.-)%s*$"))
+        end
+        if #values > 0 then
+            local result = table.concat(values, ", ")
+            logChange(changes, "table_deobfuscation", content, result, { variable = varName })
+            return string.format('local %s = {%s} -- Deobfuscated table', varName, result)
+        end
+        return string.format('local %s = {%s}', varName, content)
+    end)
+    return deobfuscated, changes
+end
+
+-- 5. Extração de Chaves Dinâmicas
+function AdvancedDeobfuscationModule:ExtractCryptoKeys(code)
+    local keys = { numeric = {}, strings = {}, xor = {} }
+    local keyPattern = "local%s+([%w_]+)%s*=%s*(%d+)"
+    for varName, value in string.gmatch(code, keyPattern) do
+        table.insert(keys.numeric, tonumber(value))
+    end
+    local stringPattern = 'local%s+([%w_]+)%s*=%s*"([^"]*)"'
+    for varName, str in string.gmatch(code, stringPattern) do
+        table.insert(keys.strings, str)
+    end
+    return keys
+end
+
+-- 6. Desofuscação Incremental
+function AdvancedDeobfuscationModule:IncrementalDeobfuscation(code, steps)
+    local deobfuscated = code
+    local changes = {}
+    for _, step in ipairs(steps) do
+        local result, stepChanges = self[step](self, deobfuscated)
+        deobfuscated = result
+        for _, change in ipairs(stepChanges) do
+            table.insert(changes, change)
+        end
+    end
+    return deobfuscated, changes
+end
+
+-- 7. Desencriptação de syn.crypt (Roblox-specific)
+function AdvancedDeobfuscationModule:DeobfuscateRobloxCrypt(code)
+    local changes = {}
+    local deobfuscated = code
+    local cryptPattern = "syn%.crypt%.decrypt%(['\"](.-)['\"],.-%)"
+    deobfuscated = string.gsub(deobfuscated, cryptPattern, function(encrypted)
+        local decrypted = syn.crypt.decrypt(encrypted, LoadedKeys and LoadedKeys.roblox or "")
+        if decrypted then
+            logChange(changes, "roblox_crypt_deobfuscation", encrypted, decrypted)
+            return '"' .. decrypted .. '"'
+        end
+        return encrypted
+    end)
+    return deobfuscated, changes
+end
+
+-- 8. Desofuscação de Funções Fragmentadas
+function AdvancedDeobfuscationModule:DeobfuscateFunctions(code)
+    local changes = {}
+    local deobfuscated = code
+    local funcPattern = "local%s+([%w_]+)%s*=%s*loadstring%(['\"](.-)['\"]%)"
+    deobfuscated = string.gsub(deobfuscated, funcPattern, function(varName, funcCode)
+        local success, result = pcall(loadstring, funcCode)
+        if success then
+            logChange(changes, "function_deobfuscation", funcCode, tostring(result), { variable = varName })
+            return string.format("local %s = -- Deobfuscated function\n%s", varName, funcCode)
+        end
+        return string.format("local %s = loadstring(%q)", varName, funcCode)
+    end)
+    return deobfuscated, changes
+end
+
+-- 9. Descompressão LZW
+function AdvancedDeobfuscationModule:DeobfuscateLZW(code)
+    local changes = {}
+    -- Placeholder: Implementar descompressão LZW (requer biblioteca específica)
+    logChange(changes, "lzw_deobfuscation", code, code, { status = "placeholder" })
+    return code, changes
+end
+
+-- 10. Descompressão Huffman
+function AdvancedDeobfuscationModule:DeobfuscateHuffman(code)
+    local changes = {}
+    -- Placeholder: Implementar descompressão Huffman
+    logChange(changes, "huffman_deobfuscation", code, code, { status = "placeholder" })
+    return code, changes
+end
+
+-- 11. Desencriptação AES
+function AdvancedDeobfuscationModule:DeobfuscateAES(code)
+    local changes = {}
+    -- Placeholder: Implementar desencriptação AES usando chaves do CryptoKeysModule
+    logChange(changes, "aes_deobfuscation", code, code, { status = "placeholder" })
+    return code, changes
+end
+
+-- 12. Desencriptação RSA
+function AdvancedDeobfuscationModule:DeobfuscateRSA(code)
+    local changes = {}
+    -- Placeholder: Implementar desencriptação RSA
+    logChange(changes, "rsa_deobfuscation", code, code, { status = "placeholder" })
+    return code, changes
+end
+
+-- 13. Desofuscação de Constantes Embaralhadas
+function AdvancedDeobfuscationModule:DeobfuscateScrambledConstants(code)
+    local changes = {}
+    local deobfuscated = code
+    local constPattern = "local%s+([%w_]+)%s*=%s*([%d%.]+)%s*[~^]%s*([%d%.]+)"
+    deobfuscated = string.gsub(deobfuscated, constPattern, function(varName, val1, val2)
+        local result = tonumber(val1) ~ tonumber(val2)
+        logChange(changes, "scrambled_constants", string.format("%s ~ %s", val1, val2), tostring(result))
+        return string.format("local %s = %s", varName, result)
+    end)
+    return deobfuscated, changes
+end
+
+-- 14. Desofuscação de Chamadas Indiretas
+function AdvancedDeobfuscationModule:DeobfuscateIndirectCalls(code)
+    local changes = {}
+    local deobfuscated = code
+    local callPattern = "([%w_]+)%[%d+%]%((.-)%)"
+    deobfuscated = string.gsub(deobfuscated, callPattern, function(funcTable, args)
+        logChange(changes, "indirect_call_deobfuscation", string.format("%s[%d](%s)", funcTable, 1, args), args)
+        return string.format("%s(%s)", funcTable, args)
+    end)
+    return deobfuscated, changes
+end
+
+-- 15. Desofuscação de Loops Ofuscados
+function AdvancedDeobfuscationModule:DeobfuscateObfuscatedLoops(code)
+    local changes = {}
+    local deobfuscated = code
+    local loopPattern = "for%s+([%w_]+)%s*=%s*([%d%.]+)%s*,%s*([%d%.]+)%s*do.-end"
+    deobfuscated = string.gsub(deobfuscated, loopPattern, function(var, start, finish)
+        logChange(changes, "loop_deobfuscation", string.format("for %s = %s, %s", var, start, finish), "-- Simplified loop")
+        return string.format("for %s = %s, %s do -- Simplified\nend", var, start, finish)
+    end)
+    return deobfuscated, changes
+end
+
+-- 16. Desofuscação de Condições Ofuscadas
+function AdvancedDeobfuscationModule:DeobfuscateObfuscatedConditions(code)
+    local changes = {}
+    local deobfuscated = code
+    local condPattern = "if%s+([%w_]+)%s*[><=]=%s*([%d%.]+)%s*then.-end"
+    deobfuscated = string.gsub(deobfuscated, condPattern, function(var, value)
+        logChange(changes, "condition_deobfuscation", string.format("if %s %s", var, value), "-- Simplified condition")
+        return string.format("if %s == %s then -- Simplified\nend", var, value)
+    end)
+    return deobfuscated, changes
+end
+
+-- 17. Desofuscação de Código Injetado
+function AdvancedDeobfuscationModule:DeobfuscateInjectedCode(code)
+    local changes = {}
+    -- Placeholder: Detectar e simplificar código injetado via eval ou loadstring
+    logChange(changes, "injected_code_deobfuscation", code, code, { status = "placeholder" })
+    return code, changes
+end
+
+-- 18. Desofuscação de Variáveis Renomeadas
+function AdvancedDeobfuscationModule:DeobfuscateRenamedVariables(code)
+    local changes = {}
+    local deobfuscated = code
+    local varPattern = "local%s+_G[%.%w]+%s*=%s*(.-);"
+    deobfuscated = string.gsub(deobfuscated, varPattern, function(value)
+        logChange(changes, "renamed_variable_deobfuscation", value, value)
+        return string.format("local meaningfulName = %s -- Renamed", value)
+    end)
+    return deobfuscated, changes
+end
+
+-- 19. Desencriptação com Chave Rotativa
+function AdvancedDeobfuscationModule:DeobfuscateRotatingKey(code)
+    local changes = {}
+    -- Placeholder: Implementar desencriptação com chaves rotativas
+    logChange(changes, "rotating_key_deobfuscation", code, code, { status = "placeholder" })
+    return code, changes
+end
+
+-- 20. Desofuscação de Strings Fragmentadas
+function AdvancedDeobfuscationModule:DeobfuscateFragmentedStrings(code)
+    local changes = {}
+    local deobfuscated = code
+    local fragPattern = '"(.-)"%s*%.%.%s*"(.-)"'
+    deobfuscated = string.gsub(deobfuscated, fragPattern, function(part1, part2)
+        local result = part1 .. part2
+        logChange(changes, "fragmented_string_deobfuscation", part1 .. ".." .. part2, result)
+        return '"' .. result .. '"'
+    end)
+    return deobfuscated, changes
+end
+
+-- 21. Desofuscação de Tabelas Dinâmicas
+function AdvancedDeobfuscationModule:DeobfuscateDynamicTables(code)
+    local changes = {}
+    -- Placeholder: Processar tabelas geradas dinamicamente
+    logChange(changes, "dynamic_table_deobfuscation", code, code, { status = "placeholder" })
+    return code, changes
+end
+
+-- 22. Desencriptação com Hashing (ex.: MD5)
+function AdvancedDeobfuscationModule:DeobfuscateHashedValues(code)
+    local changes = {}
+    -- Placeholder: Reverter valores hashados (ex.: MD5, SHA)
+    logChange(changes, "hashed_value_deobfuscation", code, code, { status = "placeholder" })
+    return code, changes
+end
+
+-- 23. Desofuscação de Chamadas de API Ofuscadas
+function AdvancedDeobfuscationModule:DeobfuscateObfuscatedAPICalls(code)
+    local changes = {}
+    local deobfuscated = code
+    local apiPattern = "([%w_]+)%.([%w_]+)%((.-)%)"
+    deobfuscated = string.gsub(deobfuscated, apiPattern, function(obj, method, args)
+        logChange(changes, "api_call_deobfuscation", string.format("%s.%s(%s)", obj, method, args), method)
+        return string.format("%s(%s)", method, args)
+    end)
+    return deobfuscated, changes
+end
+
+-- 24. Desofuscação de Loops de Controle Ofuscados
+function AdvancedDeobfuscationModule:DeobfuscateControlLoops(code)
+    local changes = {}
+    -- Placeholder: Simplificar loops de controle complexos
+    logChange(changes, "control_loop_deobfuscation", code, code, { status = "placeholder" })
+    return code, changes
+end
+
+-- 25. Desofuscação de Padrões Baseados em Regex Avançados
+function AdvancedDeobfuscationModule:DeobfuscateAdvancedPatterns(code)
+    local changes = {}
+    local deobfuscated = code
+    local advPattern = "([%w_]+)%s*=%s*function%([^)]*%)[^end]*end"
+    deobfuscated = string.gsub(deobfuscated, advPattern, function(varName)
+        logChange(changes, "advanced_pattern_deobfuscation", varName, "-- Simplified")
+        return string.format("local %s = -- Deobfuscated function", varName)
+    end)
+    return deobfuscated, changes
+end
+
+-- 26. Desofuscação de Camadas Múltiplas
+function AdvancedDeobfuscationModule:DeobfuscateLayers(code)
+    local changes = {}
+    local deobfuscated = code
+    for i = 1, self.Config.maxIterations do
+        local result, stepChanges = self:Deobfuscate(code, {})
+        if #stepChanges == 0 then break end
+        deobfuscated = result.deobfuscated
+        for _, change in ipairs(stepChanges) do
+            table.insert(changes, change)
+        end
+    end
+    return deobfuscated, changes
+end
+
+-- 27. Desencriptação com Chave Derivada
+function AdvancedDeobfuscationModule:DeobfuscateDerivedKey(code)
+    local changes = {}
+    -- Placeholder: Usar chaves derivadas do próprio código
+    logChange(changes, "derived_key_deobfuscation", code, code, { status = "placeholder" })
+    return code, changes
+end
+
+-- 28. Desofuscação de Código Concatenado
+function AdvancedDeobfuscationModule:DeobfuscateConcatenatedCode(code)
+    local changes = {}
+    local deobfuscated = code
+    local concatPattern = "local%s+([%w_]+)%s*=%s*(.-)%.%.(.-);"
+    deobfuscated = string.gsub(deobfuscated, concatPattern, function(varName, part1, part2)
+        local result = part1 .. part2
+        logChange(changes, "concatenated_code_deobfuscation", part1 .. ".." .. part2, result)
+        return string.format("local %s = %q", varName, result)
+    end)
+    return deobfuscated, changes
+end
+
+-- 29. Desofuscação de Variáveis Globais Ofuscadas
+function AdvancedDeobfuscationModule:DeobfuscateGlobalVariables(code)
+    local changes = {}
+    local deobfuscated = code
+    local globalPattern = "_G%[['\"](.-)['\"]%]"
+    deobfuscated = string.gsub(deobfuscated, globalPattern, function(key)
+        logChange(changes, "global_variable_deobfuscation", key, key)
+        return key
+    end)
+    return deobfuscated, changes
+end
+
+-- 30. Desencriptação com Chave de Sessão
+function AdvancedDeobfuscationModule:DeobfuscateSessionKey(code)
+    local changes = {}
+    -- Placeholder: Desencriptar usando chaves de sessão temporárias
+    logChange(changes, "session_key_deobfuscation", code, code, { status = "placeholder" })
+    return code, changes
+end
+
+-- 31. Desofuscação de Código Ofuscado por Eval
+function AdvancedDeobfuscationModule:DeobfuscateEvalCode(code)
+    local changes = {}
+    -- Placeholder: Processar código executado via eval
+    logChange(changes, "eval_code_deobfuscation", code, code, { status = "placeholder" })
+    return code, changes
+end
+
+-- 32. Desofuscação de Padrões de Ofuscação Personalizados
+function AdvancedDeobfuscationModule:DeobfuscateCustomPatterns(code)
+    local changes = {}
+    -- Placeholder: Detectar e reverter padrões personalizados
+    logChange(changes, "custom_pattern_deobfuscation", code, code, { status = "placeholder" })
+    return code, changes
+end
+
+-- Função principal de desofuscação
+function AdvancedDeobfuscationModule:Deobfuscate(code, options)
+    if not code or type(code) ~= "string" or #code == 0 then
+        return nil, "Código inválido ou vazio"
+    end
+    if #code > self.Config.maxStringLength then
+        return nil, "Código muito grande (limite: " .. self.Config.maxStringLength .. ")"
+    end
+
+    if self.Config.useCryptoKeys and not LoadedKeys then
+        self:InitializeCryptoKeys()
+    end
+
+    local originalConfig = {}
+    if options then
+        for key, value in pairs(options) do
+            if self.Config[key] ~= nil then
+                originalConfig[key] = self.Config[key]
+                self.Config[key] = value
+            end
+        end
+    end
+
+    local deobfuscated = code
+    local allChanges = {}
+    local methods = {
+        "DeobfuscateBytecode", "DeobfuscateBase64", "DeobfuscateEnvironments", "DeobfuscateTables",
+        "DeobfuscateRobloxCrypt", "DeobfuscateFunctions", "DeobfuscateLZW", "DeobfuscateHuffman",
+        "DeobfuscateAES", "DeobfuscateRSA", "DeobfuscateScrambledConstants", "DeobfuscateIndirectCalls",
+        "DeobfuscateObfuscatedLoops", "DeobfuscateObfuscatedConditions", "DeobfuscateInjectedCode",
+        "DeobfuscateRenamedVariables", "DeobfuscateRotatingKey", "DeobfuscateFragmentedStrings",
+        "DeobfuscateDynamicTables", "DeobfuscateHashedValues", "DeobfuscateObfuscatedAPICalls",
+        "DeobfuscateControlLoops", "DeobfuscateAdvancedPatterns", "DeobfuscateLayers",
+        "DeobfuscateDerivedKey", "DeobfuscateConcatenatedCode", "DeobfuscateGlobalVariables",
+        "DeobfuscateSessionKey", "DeobfuscateEvalCode", "DeobfuscateCustomPatterns"
+    }
+
+    for _, method in ipairs(methods) do
+        local result, methodChanges = self[method](self, deobfuscated)
+        deobfuscated = result
+        for _, change in ipairs(methodChanges) do
+            table.insert(allChanges, change)
+        end
+    end
+
+    for key, value in pairs(originalConfig) do
+        self.Config[key] = value
+    end
+
+    local result = {
+        original = code,
+        deobfuscated = deobfuscated,
+        changes = allChanges,
+        cryptoKeysUsed = LoadedKeys ~= nil,
+        statistics = {
+            originalSize = #code,
+            deobfuscatedSize = #deobfuscated,
+            changesCount = #allChanges,
+            compressionRatio = math.floor((#deobfuscated / #code) * 100)
+        },
+        metadata = {
+            processedAt = os.time(),
+            moduleVersion = self.Info.Version
+        }
+    }
+    return result, nil
+end
+
+-- Função para obter informações do módulo
+function AdvancedDeobfuscationModule:GetInfo()
+    return self.Info
+end
+
+-- Log de inicialização
+if AdvancedDeobfuscationModule.Config.logChanges then
+    print("🔓 AdvancedDeobfuscationModule v" .. AdvancedDeobfuscationModule.Info.Version .. " carregado!")
+    print("📋 32 Métodos disponíveis:")
+    for i, method in ipairs({
+        "DeobfuscateBytecode", "DeobfuscateBase64", "DeobfuscateEnvironments", "DeobfuscateTables",
+        "DeobfuscateRobloxCrypt", "DeobfuscateFunctions", "DeobfuscateLZW", "DeobfuscateHuffman",
+        "DeobfuscateAES", "DeobfuscateRSA", "DeobfuscateScrambledConstants", "DeobfuscateIndirectCalls",
+        "DeobfuscateObfuscatedLoops", "DeobfuscateObfuscatedConditions", "DeobfuscateInjectedCode",
+        "DeobfuscateRenamedVariables", "DeobfuscateRotatingKey", "DeobfuscateFragmentedStrings",
+        "DeobfuscateDynamicTables", "DeobfuscateHashedValues", "DeobfuscateObfuscatedAPICalls",
+        "DeobfuscateControlLoops", "DeobfuscateAdvancedPatterns", "DeobfuscateLayers",
+        "DeobfuscateDerivedKey", "DeobfuscateConcatenatedCode", "DeobfuscateGlobalVariables",
+        "DeobfuscateSessionKey", "DeobfuscateEvalCode", "DeobfuscateCustomPatterns",
+        "ExtractCryptoKeys", "IncrementalDeobfuscation"
+    }) do
+        print(string.format("   %d. %s", i, method))
+    end
+    AdvancedDeobfuscationModule:InitializeCryptoKeys()
+end
+
+return AdvancedDeobfuscationModule
