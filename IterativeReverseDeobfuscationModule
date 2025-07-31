@@ -1,0 +1,496 @@
+local IterativeReverseDeobfuscationModule = {}
+
+-- Metadados do módulo
+IterativeReverseDeobfuscationModule.Info = {
+    Name = "IterativeReverseDeobfuscationModule",
+    Version = "1.1.0",
+    Author = "DragonMODS",
+    Description = "Módulo iterativo para desofuscação com inversão de texto, integração com outros módulos e coleta de fragmentos",
+    LastUpdate = os.time(),
+    Dependencies = {"HttpService", "game"}
+}
+
+-- Configurações do módulo
+IterativeReverseDeobfuscationModule.Config = {
+    maxStringLength = 10000,         -- Máximo de caracteres para processar
+    enableReverseText = true,        -- Habilitar desofuscação de texto invertido
+    enableCryptoProcessing = true,   -- Usar criptografia avançada
+    logChanges = true,              -- Registrar mudanças
+    formatOutput = true,            -- Formatar saída
+    useCryptoKeys = true,           -- Usar chaves do CryptoKeysModule
+    usePreviousModules = true,      -- Usar DeobfuscationModule e AdvancedDeobfuscationModule
+    maxIterations = 5,              -- Máximo de iterações
+    saveFragments = true,           -- Salvar fragmentos desofuscados
+    enableSecondPass = true         -- Habilitar segunda verificação
+}
+
+-- Tabela para armazenar fragmentos desofuscados
+local Fragments = {}
+
+-- Função para carregar módulos
+local HttpService = game:GetService("HttpService")
+local function loadModule(url)
+    local success, response = pcall(function()
+        return game:HttpGet(url, true)
+    end)
+    if not success then
+        warn("Erro ao carregar módulo: " .. tostring(response))
+        return nil
+    end
+    local moduleFunc, loadError = loadstring(response)
+    if not moduleFunc then
+        warn("Erro ao compilar módulo: " .. tostring(loadError))
+        return nil
+    end
+    local module, execError = pcall(moduleFunc)
+    if not module then
+        warn("Erro ao executar módulo: " .. tostring(execError))
+        return nil
+    end
+    return module
+end
+
+-- Carregar módulos anteriores
+local DeobfuscationModule = loadModule("https://raw.githubusercontent.com/BRX-HUB/DragonHUB_RASGADOR-DE-INFORMA-ES/refs/heads/main/DeobfuscationModule")
+local AdvancedDeobfuscationModule = loadModule("https://raw.githubusercontent.com/BRX-HUB/DragonHUB_RASGADOR-DE-INFORMA-ES/refs/heads/main/AdvancedDeobfuscationModule")
+local CryptoKeys = nil
+local LoadedKeys = nil
+
+-- Inicializa chaves criptográficas
+function IterativeReverseDeobfuscationModule:InitializeCryptoKeys()
+    if not self.Config.useCryptoKeys then
+        return false, "Uso de chaves criptográficas desabilitado"
+    end
+    CryptoKeys = loadModule("https://raw.githubusercontent.com/BRX-HUB/DragonHUB_RASGADOR-DE-INFORMA-ES/refs/heads/main/CryptoKeysModule.lua")
+    if CryptoKeys then
+        LoadedKeys = CryptoKeys:GetAllKeys()
+        if self.Config.logChanges then
+            print("✅ IterativeReverseDeobfuscationModule: CryptoKeysModule carregado!")
+        end
+        return true, "Chaves carregadas com sucesso"
+    end
+    return false, "Falha ao carregar CryptoKeysModule"
+end
+
+-- Função auxiliar para registrar mudanças
+local function logChange(changes, changeType, original, result, details)
+    table.insert(changes, {
+        type = changeType,
+        original = original,
+        result = result,
+        details = details or {}
+    })
+end
+
+-- Função para salvar fragmentos desofuscados
+local function saveFragment(fragments, fragmentType, original, result)
+    if IterativeReverseDeobfuscationModule.Config.saveFragments then
+        table.insert(fragments, {
+            type = fragmentType,
+            original = original,
+            result = result,
+            timestamp = os.time()
+        })
+    end
+end
+
+-- Função para inverter o código
+function IterativeReverseDeobfuscationModule:InvertCode(code)
+    local reversed = string.reverse(code)
+    logChange({}, "code_inversion", code, reversed)
+    saveFragment(Fragments, "code_inversion", code, reversed)
+    return reversed
+end
+
+-- === 10 Métodos de Desofuscação/Desencriptação ===
+
+-- 1. Desofuscação de Texto Invertido (String Reversal)
+function IterativeReverseDeobfuscationModule:DeobfuscateReverseText(code)
+    if not self.Config.enableReverseText then return code, {} end
+    local changes = {}
+    local deobfuscated = code
+    local stringPattern = '"(.-)"'
+    deobfuscated = string.gsub(deobfuscated, stringPattern, function(str)
+        local reversed = string.reverse(str)
+        logChange(changes, "reverse_text_deobfuscation", str, reversed)
+        saveFragment(Fragments, "reverse_text", str, reversed)
+        return '"' .. reversed .. '"'
+    end)
+    return deobfuscated, changes
+end
+
+-- 2. Desofuscação de Texto Invertido em Blocos
+function IterativeReverseDeobfuscationModule:DeobfuscateBlockReverse(code)
+    local changes = {}
+    local deobfuscated = code
+    local blockPattern = '"(.-)"'
+    deobfuscated = string.gsub(deobfuscated, blockPattern, function(str)
+        local blockSize = math.floor(#str / 2)
+        local result = ""
+        for i = 1, #str, blockSize do
+            local block = string.sub(str, i, i + blockSize - 1)
+            result = result .. string.reverse(block)
+        end
+        logChange(changes, "block_reverse_deobfuscation", str, result)
+        saveFragment(Fragments, "block_reverse", str, result)
+        return '"' .. result .. '"'
+    end)
+    return deobfuscated, changes
+end
+
+-- 3. Desencriptação com ROT47
+function IterativeReverseDeobfuscationModule:DeobfuscateROT47(code)
+    local changes = {}
+    local deobfuscated = code
+    local rot47Pattern = '"(.-)"'
+    deobfuscated = string.gsub(deobfuscated, rot47Pattern, function(str)
+        local result = ""
+        for i = 1, #str do
+            local c = string.byte(str, i)
+            if c >= 33 and c <= 126 then
+                result = result .. string.char((c - 33 + 47) % 94 + 33)
+            else
+                result = result .. string.char(c)
+            end
+        end
+        logChange(changes, "rot47_deobfuscation", str, result)
+        saveFragment(Fragments, "rot47", str, result)
+        return '"' .. result .. '"'
+    end)
+    return deobfuscated, changes
+end
+
+-- 4. Desofuscação de Strings Codificadas em Base32
+function IterativeReverseDeobfuscationModule:DeobfuscateBase32(code)
+    local changes = {}
+    local deobfuscated = code
+    local base32Pattern = '"([A-Z2-7]+)"'
+    deobfuscated = string.gsub(deobfuscated, base32Pattern, function(encoded)
+        local success, decoded = pcall(function()
+            -- Placeholder: Implementar decodificação Base32 (requer biblioteca ou algoritmo)
+            return encoded -- Substituir por implementação real
+        end)
+        if success and decoded then
+            logChange(changes, "base32_deobfuscation", encoded, decoded)
+            saveFragment(Fragments, "base32", encoded, decoded)
+            return '"' .. decoded .. '"'
+        end
+        return encoded
+    end)
+    return deobfuscated, changes
+end
+
+-- 5. Desofuscação de Strings Codificadas em URL Encoding
+function IterativeReverseDeobfuscationModule:DeobfuscateURLEncoding(code)
+    local changes = {}
+    local deobfuscated = code
+    local urlPattern = '"(%S+)"'
+    deobfuscated = string.gsub(deobfuscated, urlPattern, function(encoded)
+        local success, decoded = pcall(function()
+            return HttpService:UrlDecode(encoded) -- Roblox API
+        end)
+        if success and decoded then
+            logChange(changes, "url_encoding_deobfuscation", encoded, decoded)
+            saveFragment(Fragments, "url_encoding", encoded, decoded)
+            return '"' .. decoded .. '"'
+        end
+        return encoded
+    end)
+    return deobfuscated, changes
+end
+
+-- 6. Desofuscação de Vigenère Cipher
+function IterativeReverseDeobfuscationModule:DeobfuscateVigenere(code, key)
+    local changes = {}
+    local deobfuscated = code
+    key = key or (LoadedKeys and LoadedKeys.strings and LoadedKeys.strings[1]) or "key"
+    local vigenerePattern = '"(.-)"'
+    deobfuscated = string.gsub(deobfuscated, vigenerePattern, function(str)
+        local result = ""
+        for i = 1, #str do
+            local c = string.byte(str, i)
+            local k = string.byte(key, (i - 1) % #key + 1)
+            if c >= 32 and c <= 126 then
+                result = result .. string.char((c - 32 - (k - 32)) % 95 + 32)
+            else
+                result = result .. string.char(c)
+            end
+        end
+        logChange(changes, "vigenere_deobfuscation", str, result, { key = key })
+        saveFragment(Fragments, "vigenere", str, result)
+        return '"' .. result .. '"'
+    end)
+    return deobfuscated, changes
+end
+
+-- 7. Desofuscação de Strings Permutadas
+function IterativeReverseDeobfuscationModule:DeobfuscatePermutedStrings(code)
+    local changes = {}
+    local deobfuscated = code
+    local permPattern = '"(.-)"'
+    deobfuscated = string.gsub(deobfuscated, permPattern, function(str)
+        local chars = {string.byte(str, 1, -1)}
+        table.sort(chars) -- Placeholder: Reverter permutação (exige análise de padrões)
+        local result = ""
+        for _, c in ipairs(chars) do
+            result = result .. string.char(c)
+        end
+        logChange(changes, "permuted_string_deobfuscation", str, result)
+        saveFragment(Fragments, "permuted_string", str, result)
+        return '"' .. result .. '"'
+    end)
+    return deobfuscated, changes
+end
+
+-- 8. Desofuscação de Código Ofuscado por Injeção de Ruído
+function IterativeReverseDeobfuscationModule:DeobfuscateNoiseInjection(code)
+    local changes = {}
+    local deobfuscated = code
+    local noisePattern = "%-%-%[=*%[.-%]=*%]%s*"
+    deobfuscated = string.gsub(deobfuscated, noisePattern, function(noise)
+        logChange(changes, "noise_injection_deobfuscation", noise, "")
+        saveFragment(Fragments, "noise_injection", noise, "")
+        return ""
+    end)
+    return deobfuscated, changes
+end
+
+-- 9. Desofuscação de Tokens Substitutos
+function IterativeReverseDeobfuscationModule:DeobfuscateTokenSubstitution(code)
+    local changes = {}
+    local deobfuscated = code
+    local tokenPattern = "local%s+([%w_]+)%s*=%s*([%w_]+)"
+    deobfuscated = string.gsub(deobfuscated, tokenPattern, function(varName, token)
+        local knownTokens = { print = true, require = true, game = true } -- Exemplo
+        if knownTokens[token] then
+            logChange(changes, "token_substitution_deobfuscation", varName, token)
+            saveFragment(Fragments, "token_substitution", varName, token)
+            return token
+        end
+        return string.format("local %s = %s", varName, token)
+    end)
+    return deobfuscated, changes
+end
+
+-- 10. Montagem de Código a Partir de Fragmentos
+function IterativeReverseDeobfuscationModule:AssembleFragments(code)
+    local changes = {}
+    local deobfuscated = code
+    if #Fragments > 0 then
+        local assembled = ""
+        for _, fragment in ipairs(Fragments) do
+            assembled = assembled .. fragment.result .. "\n"
+            logChange(changes, "fragment_assembly", fragment.original, fragment.result, { type = fragment.type })
+        end
+        deobfuscated = deobfuscated .. "\n-- Assembled Fragments:\n" .. assembled
+    end
+    return deobfuscated, changes
+end
+
+-- Função para aplicar métodos dos módulos anteriores
+function IterativeReverseDeobfuscationModule:ApplyPreviousModules(code, isReversed)
+    local changes = {}
+    local deobfuscated = code
+
+    if self.Config.usePreviousModules then
+        -- Aplica DeobfuscationModule
+        if DeobfuscationModule then
+            local result, err = DeobfuscationModule:Deobfuscate(deobfuscated)
+            if result then
+                deobfuscated = result.deobfuscated
+                for _, change in ipairs(result.changes or {}) do
+                    logChange(changes, "deobfuscation_module_" .. change.type, change.original, change.result, change.details)
+                    saveFragment(Fragments, "deobfuscation_module_" .. change.type, change.original, change.result)
+                end
+            else
+                warn("Erro ao aplicar DeobfuscationModule: " .. tostring(err))
+            end
+        end
+
+        -- Aplica AdvancedDeobfuscationModule
+        if AdvancedDeobfuscationModule then
+            local result, err = AdvancedDeobfuscationModule:Deobfuscate(deobfuscated)
+            if result then
+                deobfuscated = result.deobfuscated
+                for _, change in ipairs(result.changes or {}) do
+                    logChange(changes, "advanced_deobfuscation_module_" .. change.type, change.original, change.result, change.details)
+                    saveFragment(Fragments, "advanced_deobfuscation_module_" .. change.type, change.original, change.result)
+                end
+            else
+                warn("Erro ao aplicar AdvancedDeobfuscationModule: " .. tostring(err))
+            end
+        end
+    end
+
+    return deobfuscated, changes
+end
+
+-- Função principal de desofuscação iterativa
+function IterativeReverseDeobfuscationModule:Deobfuscate(code, options)
+    if not code or type(code) ~= "string" or #code == 0 then
+        return nil, "Código inválido ou vazio"
+    end
+    if #code > self.Config.maxStringLength then
+        return nil, "Código muito grande (limite: " .. self.Config.maxStringLength .. ")"
+    end
+
+    if self.Config.useCryptoKeys and not LoadedKeys then
+        self:InitializeCryptoKeys()
+    end
+
+    -- Limpa fragmentos anteriores
+    Fragments = {}
+
+    local originalConfig = {}
+    if options then
+        for key, value in pairs(options) do
+            if self.Config[key] ~= nil then
+                originalConfig[key] = self.Config[key]
+                self.Config[key] = value
+            end
+        end
+    end
+
+    local deobfuscated = code
+    local allChanges = {}
+
+    -- Primeira rodada: Aplicar métodos em código normal e invertido
+    local normalCode = code
+    local reversedCode = self:InvertCode(code)
+
+    -- Métodos do módulo atual
+    local methods = {
+        "DeobfuscateReverseText", "DeobfuscateBlockReverse", "DeobfuscateROT47",
+        "DeobfuscateBase32", "DeobfuscateURLEncoding", "DeobfuscateVigenere",
+        "DeobfuscatePermutedStrings", "DeobfuscateNoiseInjection",
+        "DeobfuscateTokenSubstitution"
+    }
+
+    -- Aplica métodos dos módulos anteriores e próprios no código normal
+    local normalResult, normalChanges = self:ApplyPreviousModules(normalCode, false)
+    deobfuscated = normalResult
+    for _, change in ipairs(normalChanges) do
+        table.insert(allChanges, change)
+    end
+
+    for i = 1, self.Config.maxIterations do
+        local iterationChanges = {}
+        local anyChange = false
+        for _, method in ipairs(methods) do
+            local result, methodChanges = self[method](self, deobfuscated)
+            deobfuscated = result
+            for _, change in ipairs(methodChanges) do
+                table.insert(iterationChanges, change)
+                anyChange = true
+            end
+        end
+        for _, change in ipairs(iterationChanges) do
+            table.insert(allChanges, change)
+        end
+        if not anyChange then break end
+    end
+
+    -- Aplica métodos dos módulos anteriores e próprios no código invertido
+    local reversedResult, reversedChanges = self:ApplyPreviousModules(reversedCode, true)
+    local reversedDeobfuscated = reversedResult
+    for _, change in ipairs(reversedChanges) do
+        table.insert(allChanges, change)
+    end
+
+    for i = 1, self.Config.maxIterations do
+        local iterationChanges = {}
+        local anyChange = false
+        for _, method in ipairs(methods) do
+            local result, methodChanges = self[method](self, reversedDeobfuscated)
+            reversedDeobfuscated = result
+            for _, change in ipairs(methodChanges) do
+                table.insert(iterationChanges, change)
+                anyChange = true
+            end
+        end
+        for _, change in ipairs(iterationChanges) do
+            table.insert(allChanges, change)
+        end
+        if not anyChange then break end
+    end
+
+    -- Segunda verificação: Reaplicar métodos próprios no resultado combinado
+    if self.Config.enableSecondPass then
+        local combinedCode = deobfuscated .. "\n-- Reversed Result:\n" .. string.reverse(reversedDeobfuscated)
+        for i = 1, self.Config.maxIterations do
+            local iterationChanges = {}
+            local anyChange = false
+            for _, method in ipairs(methods) do
+                local result, methodChanges = self[method](self, combinedCode)
+                combinedCode = result
+                for _, change in ipairs(methodChanges) do
+                    table.insert(iterationChanges, change)
+                    anyChange = true
+                end
+            end
+            for _, change in ipairs(iterationChanges) do
+                table.insert(allChanges, change)
+            end
+            if not anyChange then break end
+        end
+        deobfuscated = combinedCode
+    end
+
+    -- Montar fragmentos
+    local finalResult, assembleChanges = self:AssembleFragments(deobfuscated)
+    deobfuscated = finalResult
+    for _, change in ipairs(assembleChanges) do
+        table.insert(allChanges, change)
+    end
+
+    for key, value in pairs(originalConfig) do
+        self.Config[key] = value
+    end
+
+    local result = {
+        original = code,
+        deobfuscated = deobfuscated,
+        changes = allChanges,
+        fragments = Fragments, -- Inclui fragmentos salvos
+        cryptoKeysUsed = LoadedKeys ~= nil,
+        statistics = {
+            originalSize = #code,
+            deobfuscatedSize = #deobfuscated,
+            changesCount = #allChanges,
+            fragmentCount = #Fragments,
+            compressionRatio = math.floor((#deobfuscated / #code) * 100)
+        },
+        metadata = {
+            processedAt = os.time(),
+            moduleVersion = self.Info.Version
+        }
+    }
+    return result, nil
+end
+
+-- Função para obter fragmentos salvos
+function IterativeReverseDeobfuscationModule:GetFragments()
+    return Fragments
+end
+
+-- Função para obter informações do módulo
+function IterativeReverseDeobfuscationModule:GetInfo()
+    return self.Info
+end
+
+-- Log de inicialização
+if IterativeReverseDeobfuscationModule.Config.logChanges then
+    print("🔓 IterativeReverseDeobfuscationModule v" .. IterativeReverseDeobfuscationModule.Info.Version .. " carregado!")
+    print("📋 10 Métodos disponíveis + integração com DeobfuscationModule e AdvancedDeobfuscationModule:")
+    for i, method in ipairs({
+        "DeobfuscateReverseText", "DeobfuscateBlockReverse", "DeobfuscateROT47",
+        "DeobfuscateBase32", "DeobfuscateURLEncoding", "DeobfuscateVigenere",
+        "DeobfuscatePermutedStrings", "DeobfuscateNoiseInjection",
+        "DeobfuscateTokenSubstitution", "AssembleFragments"
+    }) do
+        print(string.format("   %d. %s", i, method))
+    end
+    IterativeReverseDeobfuscationModule:InitializeCryptoKeys()
+end
+
+return IterativeReverseDeobfuscationModule
