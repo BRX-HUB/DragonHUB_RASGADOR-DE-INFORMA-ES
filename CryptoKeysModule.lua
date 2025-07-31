@@ -4,7 +4,7 @@ local CryptoKeysModule = {}
 CryptoKeysModule.Info = {
     Name = "CryptoKeysModule", 
     Version = "1.0.0",
-    Author = "Delta Team",
+    Author = "DragonMODS",
     Description = "Banco de chaves para quebra de criptografia",
     LastUpdate = os.time()
 }
