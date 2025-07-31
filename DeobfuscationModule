@@ -1,0 +1,767 @@
+local DeobfuscationModule = {}
+
+-- Metadados do módulo
+DeobfuscationModule.Info = {
+    Name = "DeobfuscationModule",
+    Version = "1.0.0",
+    Author = "DragonMODS",
+    Description = "Módulo especializado em desobfuscação e desencriptação de código Lua",
+    LastUpdate = os.time(),
+    Dependencies = {"HttpService", "game"}
+}
+
+-- Configurações do módulo (podem ser alteradas pelo script principal)
+DeobfuscationModule.Config = {
+    maxStringLength = 10000,         -- Máximo de caracteres para processar
+    enableAdvancedDeobfuscation = true,  -- Desobfuscação avançada
+    detectObfuscationType = true,    -- Detectar tipo de obfuscação
+    processStringChars = true,       -- Processar string.char()
+    processCharArrays = true,        -- Processar arrays de caracteres
+    processMathOperations = true,    -- Processar operações matemáticas
+    enablePatternDetection = true,   -- Detectar padrões conhecidos
+    logChanges = true,              -- Registrar mudanças feitas
+    preserveComments = false,       -- Preservar comentários originais
+    formatOutput = true,            -- Formatar saída
+    useCryptoKeys = true            -- Usar chaves criptográficas
+}
+
+-- Script para carregar e exibir chaves do CryptoKeysModule no Delta Executor
+local HttpService = game:GetService("HttpService")
+
+-- Função para carregar o módulo de chaves
+local function loadCryptoKeysModule()
+    local url = "https://raw.githubusercontent.com/BRX-HUB/DragonHUB_RASGADOR-DE-INFORMA-ES/refs/heads/main/CryptoKeysModule.lua"
+    local success, response = pcall(function()
+        return game:HttpGet(url, true)
+    end)
+    
+    if not success then
+        warn("Erro ao carregar o módulo: " .. tostring(response))
+        return nil
+    end
+    
+    -- Carrega o código como uma função
+    local moduleFunc, loadError = loadstring(response)
+    if not moduleFunc then
+        warn("Erro ao compilar o módulo: " .. tostring(loadError))
+        return nil
+    end
+    
+    -- Executa a função para obter o módulo
+    local module, execError = pcall(moduleFunc)
+    if not module then
+        warn("Erro ao executar o módulo: " .. tostring(execError))
+        return nil
+    end
+    
+    return module
+end
+
+-- Função para exibir todas as chaves
+local function printAllKeys(keys)
+    print("=== Chaves Carregadas ===")
+    
+    -- Chaves numéricas
+    print("Chaves Numéricas (" .. #keys.numeric .. "):")
+    for i, chave in ipairs(keys.numeric) do
+        print("  [" .. i .. "] " .. tostring(chave))
+    end
+    
+    -- Chaves de string
+    print("\nChaves de String (" .. #keys.strings .. "):")
+    for i, chave in ipairs(keys.strings) do
+        print("  [" .. i .. "] " .. chave)
+    end
+    
+    -- Chaves de símbolos
+    print("\nChaves de Símbolos (" .. #keys.symbols .. "):")
+    for i, chave in ipairs(keys.symbols) do
+        print("  [" .. i .. "] " .. string.format("%q", chave))
+    end
+    
+    -- Chaves Base64
+    print("\nChaves Base64 (" .. #keys.base64 .. "):")
+    for i, chave in ipairs(keys.base64) do
+        print("  [" .. i .. "] " .. chave)
+    end
+    
+    -- Chaves de deslocamento
+    print("\nChaves de Deslocamento (" .. #keys.shifts .. "):")
+    for i, chave in ipairs(keys.shifts) do
+        print("  [" .. i .. "] " .. tostring(chave))
+    end
+    
+    -- Chaves XOR
+    print("\nChaves XOR (" .. #keys.xor .. "):")
+    for i, chave in ipairs(keys.xor) do
+        if type(chave) == "table" then
+            print("  [" .. i .. "] " .. table.concat(chave, ", "))
+        else
+            print("  [" .. i .. "] " .. tostring(chave))
+        end
+    end
+    
+    -- Chaves de obfuscadores
+    print("\nChaves de Obfuscadores:")
+    for obfName, obfKeys in pairs(keys.obfuscators) do
+        print("  Obfuscador: " .. obfName)
+        print("    Numéricas (" .. #obfKeys.numeric .. "): " .. table.concat(obfKeys.numeric, ", "))
+        print("    Strings (" .. #obfKeys.strings .. "): " .. table.concat(obfKeys.strings, ", "))
+        print("    Padrões (" .. #obfKeys.patterns .. "): " .. table.concat(obfKeys.patterns, ", "))
+    end
+    
+    print("\n📊 Total de chaves carregadas: " .. (CryptoKeys and CryptoKeys:CountKeys() or "N/A"))
+end
+
+-- Variável para armazenar as chaves carregadas
+local CryptoKeys = nil
+local LoadedKeys = nil
+
+-- Função para inicializar as chaves
+function DeobfuscationModule:InitializeCryptoKeys()
+    if not DeobfuscationModule.Config.useCryptoKeys then
+        return false, "Uso de chaves criptográficas está desabilitado"
+    end
+    
+    -- Carrega o módulo
+    CryptoKeys = loadCryptoKeysModule()
+    if CryptoKeys then
+        -- Obtém todas as chaves
+        LoadedKeys = CryptoKeys:GetAllKeys()
+        if LoadedKeys then
+            if DeobfuscationModule.Config.logChanges then
+                printAllKeys(LoadedKeys)
+                print("✅ CryptoKeysModule carregado com sucesso!")
+            end
+            return true, "Chaves carregadas com sucesso"
+        else
+            warn("Erro: Não foi possível obter as chaves.")
+            return false, "Falha ao obter as chaves"
+        end
+    else
+        warn("Falha ao carregar o CryptoKeysModule.")
+        return false, "Falha ao carregar o módulo de chaves"
+    end
+end
+
+-- Função para obter as chaves carregadas
+function DeobfuscationModule:GetLoadedKeys()
+    return LoadedKeys
+end
+
+-- Função para adicionar nova chave ao módulo carregado
+function DeobfuscationModule:AddCryptoKey(key, keyType)
+    if not CryptoKeys then
+        return false, "CryptoKeysModule não está carregado"
+    end
+    
+    local success = CryptoKeys:AddKey(key, keyType)
+    if success then
+        -- Recarrega as chaves
+        LoadedKeys = CryptoKeys:GetAllKeys()
+        return true, "Chave adicionada com sucesso"
+    end
+    
+    return false, "Chave já existe ou tipo inválido"
+end
+
+-- Função para verificar se uma chave existe
+function DeobfuscationModule:CheckCryptoKey(key, keyType)
+    if not CryptoKeys then
+        return false, "CryptoKeysModule não está carregado"
+    end
+    
+    return CryptoKeys:KeyExists(key, keyType)
+end
+
+-- Função para gerar chaves customizadas
+function DeobfuscationModule:GenerateCustomKeys(pattern, count)
+    if not CryptoKeys then
+        return nil, "CryptoKeysModule não está carregado"
+    end
+    
+    return CryptoKeys:GenerateCustomKeys(pattern, count)
+end
+
+-- Função para obter informações do CryptoKeysModule
+function DeobfuscationModule:GetCryptoKeysInfo()
+    if not CryptoKeys then
+        return nil, "CryptoKeysModule não está carregado"
+    end
+    
+    return CryptoKeys:GetInfo()
+end
+
+-- Padrões de obfuscação conhecidos
+local obfuscationPatterns = {
+    luraph = {
+        patterns = {
+            "local%s+[%w_]+%s*=%s*{[^}]*}",
+            "getfenv%(%d*%)",
+            "setfenv%([^)]*%)"
+        },
+        identifier = "Luraph",
+        description = "Luraph Obfuscator"
+    },
+    psu = {
+        patterns = {
+            "getfenv%(%)",
+            "setfenv%([^,]+,%s*getfenv%([^)]*%)%)"
+        },
+        identifier = "PSU",
+        description = "PSU Obfuscator"
+    },
+    ironbrew = {
+        patterns = {
+            "bit32%.bxor",
+            "bit32%.band",
+            "bit32%.rshift"
+        },
+        identifier = "IronBrew",
+        description = "IronBrew2 Obfuscator"
+    },
+    synapse = {
+        patterns = {
+            "syn%.crypt",
+            "syn%.decrypt",
+            "getgenv%(%)"
+        },
+        identifier = "Synapse",
+        description = "Synapse Obfuscation"
+    },
+    simple = {
+        patterns = {
+            "local%s+[%w_]+%s*=%s*%d+.-local%s+[%w_]+%s*=%s*%d+",
+            "string%.char%([%d%s,]+%)"
+        },
+        identifier = "Simple",
+        description = "Simple Variable Obfuscation"
+    },
+    string_obfuscation = {
+        patterns = {
+            "string%.char%([%d%s,]+%)",
+            "string%.byte%(.-%)",
+            "string%.sub%(.-%)"
+        },
+        identifier = "StringObfuscation",
+        description = "String-based Obfuscation"
+    },
+    function_obfuscation = {
+        patterns = {
+            "function%s*%([%w%s,_]*%)%s*local%s+[%w_]+%s*=%s*{",
+            "local%s+function%s+[%w_]+%([^)]*%).-end"
+        },
+        identifier = "FunctionObfuscation",
+        description = "Function-based Obfuscation"
+    },
+    constant_array = {
+        patterns = {
+            "local%s+[%w_]+%s*=%s*{[%d%s,\"']+}",
+            "%w+%[%d+%]"
+        },
+        identifier = "ConstantArray",
+        description = "Constant Array Obfuscation"
+    }
+}
+
+-- Função para gerar hash de código
+local function generateCodeHash(content)
+    local hash = 0
+    for i = 1, math.min(#content, 1000) do
+        hash = hash + string.byte(content, i) * i
+    end
+    return tostring(hash)
+end
+
+-- Função para detectar tipo de obfuscação
+function DeobfuscationModule:DetectObfuscationType(code)
+    if not DeobfuscationModule.Config.detectObfuscationType then 
+        return "Unknown", {} 
+    end
+    
+    local detectedTypes = {}
+    local confidence = {}
+    
+    for name, obfuscator in pairs(obfuscationPatterns) do
+        local matches = 0
+        local matchedPatterns = {}
+        
+        for _, pattern in pairs(obfuscator.patterns) do
+            local patternMatches = select(2, string.gsub(code, pattern, ""))
+            matches = matches + patternMatches
+            if patternMatches > 0 then
+                table.insert(matchedPatterns, pattern)
+            end
+        end
+        
+        if matches > 0 then
+            detectedTypes[name] = {
+                identifier = obfuscator.identifier,
+                description = obfuscator.description,
+                matches = matches,
+                patterns = matchedPatterns,
+                confidence = math.min(matches * 10, 100)
+            }
+            confidence[name] = matches
+        end
+    end
+    
+    -- Retorna o tipo com maior confiança
+    local bestMatch = "Unknown"
+    local maxConfidence = 0
+    for name, conf in pairs(confidence) do
+        if conf > maxConfidence then
+            maxConfidence = conf
+            bestMatch = name
+        end
+    end
+    
+    return bestMatch, detectedTypes
+end
+
+-- Função para desobfuscar strings usando chaves criptográficas
+function DeobfuscationModule:DeobfuscateStringsWithKeys(code)
+    if not DeobfuscationModule.Config.processStringChars or not LoadedKeys then 
+        return self:DeobfuscateStrings(code)
+    end
+    
+    local deobfuscated = code
+    local changes = {}
+    
+    -- Tenta usar chaves XOR para desobfuscação
+    if LoadedKeys.xor then
+        for _, xorKey in ipairs(LoadedKeys.xor) do
+            if type(xorKey) == "number" then
+                -- Tenta aplicar XOR com a chave
+                local xorPattern = "(%d+)%s*[~^]%s*" .. tostring(xorKey)
+                deobfuscated = string.gsub(deobfuscated, xorPattern, function(match)
+                    local num = tonumber(string.match(match, "(%d+)"))
+                    if num then
+                        local result = num ~ xorKey
+                        table.insert(changes, {
+                            type = "xor_key_deobfuscation",
+                            original = match,
+                            result = result,
+                            key = xorKey
+                        })
+                        return tostring(result)
+                    end
+                    return match
+                end)
+            elseif type(xorKey) == "table" then
+                -- Tenta aplicar XOR com array de chaves
+                for i, key in ipairs(xorKey) do
+                    local pattern = "(%d+)%s*[~^]%s*" .. tostring(key)
+                    deobfuscated = string.gsub(deobfuscated, pattern, function(match)
+                        local num = tonumber(string.match(match, "(%d+)"))
+                        if num then
+                            local result = num ~ key
+                            table.insert(changes, {
+                                type = "xor_array_key_deobfuscation",
+                                original = match,
+                                result = result,
+                                key = key,
+                                keyIndex = i
+                            })
+                            return tostring(result)
+                        end
+                        return match
+                    end)
+                end
+            end
+        end
+    end
+    
+    -- Tenta usar chaves numéricas para substituições
+    if LoadedKeys.numeric then
+        for _, numKey in ipairs(LoadedKeys.numeric) do
+            -- Procura por padrões como: local var = numKey + algo
+            local numPattern = "local%s+([%w_]+)%s*=%s*" .. tostring(numKey) .. "%s*([%+%-*/])%s*(%d+)"
+            deobfuscated = string.gsub(deobfuscated, numPattern, function(varName, op, num2)
+                local n2 = tonumber(num2)
+                if n2 then
+                    local result = 0
+                    if op == "+" then result = numKey + n2
+                    elseif op == "-" then result = numKey - n2
+                    elseif op == "*" then result = numKey * n2
+                    elseif op == "/" and n2 ~= 0 then result = numKey / n2
+                    else return string.format("local %s = %s %s %s", varName, numKey, op, num2) end
+                    
+                    table.insert(changes, {
+                        type = "numeric_key_simplification",
+                        variable = varName,
+                        original = string.format("%s %s %s", numKey, op, num2),
+                        result = result,
+                        key = numKey
+                    })
+                    
+                    return string.format("local %s = %g -- Simplified using key %s", varName, result, numKey)
+                end
+                return string.format("local %s = %s %s %s", varName, numKey, op, num2)
+            end)
+        end
+    end
+    
+    -- Continua com desobfuscação normal de strings
+    local normalResult, normalChanges = self:DeobfuscateStrings(deobfuscated)
+    for _, change in ipairs(normalChanges) do
+        table.insert(changes, change)
+    end
+    
+    return normalResult, changes
+end
+
+-- Função para desobfuscar strings
+function DeobfuscationModule:DeobfuscateStrings(code)
+    if not DeobfuscationModule.Config.processStringChars then return code, {} end
+    
+    local deobfuscated = code
+    local changes = {}
+    
+    -- Padrão para string.char(números)
+    local stringCharPattern = "string%.char%([%d%s,]+%)"
+    deobfuscated = string.gsub(deobfuscated, stringCharPattern, function(match)
+        local numbers = string.match(match, "string%.char%(([%d%s,]+)%)")
+        if not numbers then return match end
+        
+        local chars = {}
+        local success = true
+        
+        for num in string.gmatch(numbers, "%d+") do
+            local charCode = tonumber(num)
+            if charCode and charCode >= 0 and charCode <= 255 then
+                table.insert(chars, string.char(charCode))
+            else
+                success = false
+                break
+            end
+        end
+        
+        if success and #chars > 0 then
+            local result = table.concat(chars)
+            table.insert(changes, {
+                type = "string_char_deobfuscation",
+                original = match,
+                deobfuscated = result,
+                position = string.find(deobfuscated, match, 1, true)
+            })
+            return '"' .. result .. '"'
+        end
+        
+        return match
+    end)
+    
+    return deobfuscated, changes
+end
+
+-- Função para desobfuscar arrays de caracteres
+function DeobfuscationModule:DeobfuscateCharArrays(code)
+    if not DeobfuscationModule.Config.processCharArrays then return code, {} end
+    
+    local deobfuscated = code
+    local changes = {}
+    
+    -- Padrão para arrays de números que representam caracteres
+    local charArrayPattern = "local%s+([%w_]+)%s*=%s*{([%d%s,]+)}"
+    deobfuscated = string.gsub(deobfuscated, charArrayPattern, function(varName, values)
+        local chars = {}
+        local allValid = true
+        
+        for num in string.gmatch(values, "%d+") do
+            local charCode = tonumber(num)
+            if charCode and charCode >= 32 and charCode <= 126 then -- ASCII imprimível
+                table.insert(chars, string.char(charCode))
+            else
+                allValid = false
+                break
+            end
+        end
+        
+        if allValid and #chars > 3 then -- Só desobfusca se tiver pelo menos 4 chars
+            local result = table.concat(chars)
+            table.insert(changes, {
+                type = "char_array_deobfuscation",
+                variable = varName,
+                original = values,
+                deobfuscated = result,
+                arraySize = #chars
+            })
+            return string.format('local %s = "%s" -- Deobfuscated char array', varName, result)
+        end
+        
+        return string.format("local %s = {%s}", varName, values)
+    end)
+    
+    return deobfuscated, changes
+end
+
+-- Função para processar operações matemáticas simples
+function DeobfuscationModule:ProcessMathOperations(code)
+    if not DeobfuscationModule.Config.processMathOperations then return code, {} end
+    
+    local deobfuscated = code
+    local changes = {}
+    
+    -- Processa operações matemáticas simples em variáveis
+    local mathPattern = "local%s+([%w_]+)%s*=%s*(%d+)%s*([%+%-*/])%s*(%d+)"
+    deobfuscated = string.gsub(deobfuscated, mathPattern, function(varName, num1, op, num2)
+        local n1, n2 = tonumber(num1), tonumber(num2)
+        if not n1 or not n2 then return string.format("local %s = %s %s %s", varName, num1, op, num2) end
+        
+        local result = 0
+        if op == "+" then result = n1 + n2
+        elseif op == "-" then result = n1 - n2
+        elseif op == "*" then result = n1 * n2
+        elseif op == "/" and n2 ~= 0 then result = n1 / n2
+        else return string.format("local %s = %s %s %s", varName, num1, op, num2) end
+        
+        table.insert(changes, {
+            type = "math_operation_simplification",
+            variable = varName,
+            original = string.format("%s %s %s", num1, op, num2),
+            result = result
+        })
+        
+        return string.format("local %s = %g -- Simplified from %s %s %s", varName, result, num1, op, num2)
+    end)
+    
+    return deobfuscated, changes
+end
+
+-- Função principal de desobfuscação
+function DeobfuscationModule:Deobfuscate(code, options)
+    if not code or type(code) ~= "string" or #code == 0 then
+        return nil, "Código inválido ou vazio"
+    end
+    
+    if #code > DeobfuscationModule.Config.maxStringLength then
+        return nil, "Código muito grande (limite: " .. DeobfuscationModule.Config.maxStringLength .. " caracteres)"
+    end
+    
+    -- Inicializa chaves se necessário
+    if DeobfuscationModule.Config.useCryptoKeys and not LoadedKeys then
+        self:InitializeCryptoKeys()
+    end
+    
+    -- Aplicar opções específicas se fornecidas
+    local originalConfig = {}
+    if options then
+        for key, value in pairs(options) do
+            if DeobfuscationModule.Config[key] ~= nil then
+                originalConfig[key] = DeobfuscationModule.Config[key]
+                DeobfuscationModule.Config[key] = value
+            end
+        end
+    end
+    
+    local deobfuscated = code
+    local allChanges = {}
+    local obfuscationType, typeDetails = self:DetectObfuscationType(code)
+    
+    -- Processa desobfuscação por etapas
+    if DeobfuscationModule.Config.enableAdvancedDeobfuscation then
+        -- Etapa 1: Desobfuscar strings (com ou sem chaves)
+        local stringChanges
+        if DeobfuscationModule.Config.useCryptoKeys and LoadedKeys then
+            deobfuscated, stringChanges = self:DeobfuscateStringsWithKeys(deobfuscated)
+        else
+            deobfuscated, stringChanges = self:DeobfuscateStrings(deobfuscated)
+        end
+        for _, change in ipairs(stringChanges) do
+            table.insert(allChanges, change)
+        end
+        
+        -- Etapa 2: Desobfuscar arrays de caracteres
+        local arrayChanges
+        deobfuscated, arrayChanges = self:DeobfuscateCharArrays(deobfuscated)
+        for _, change in ipairs(arrayChanges) do
+            table.insert(allChanges, change)
+        end
+        
+        -- Etapa 3: Simplificar operações matemáticas
+        local mathChanges
+        deobfuscated, mathChanges = self:ProcessMathOperations(deobfuscated)
+        for _, change in ipairs(mathChanges) do
+            table.insert(allChanges, change)
+        end
+    end
+    
+    -- Restaurar configurações originais se foram alteradas
+    for key, value in pairs(originalConfig) do
+        DeobfuscationModule.Config[key] = value
+    end
+    
+    -- Resultado final
+    local result = {
+        original = code,
+        deobfuscated = deobfuscated,
+        obfuscationType = obfuscationType,
+        typeDetails = typeDetails,
+        changes = allChanges,
+        cryptoKeysUsed = LoadedKeys ~= nil,
+        statistics = {
+            originalSize = #code,
+            deobfuscatedSize = #deobfuscated,
+            changesCount = #allChanges,
+            compressionRatio = math.floor((#deobfuscated / #code) * 100),
+            hash = generateCodeHash(code)
+        },
+        metadata = {
+            processedAt = os.time(),
+            processingTime = 0, -- Será calculado pelo script principal se necessário
+            moduleVersion = DeobfuscationModule.Info.Version
+        }
+    }
+    
+    return result, nil
+end
+
+-- Função para analisar código sem desobfuscar
+function DeobfuscationModule:AnalyzeCode(code)
+    if not code or type(code) ~= "string" then
+        return nil, "Código inválido"
+    end
+    
+    local obfuscationType, typeDetails = self:DetectObfuscationType(code)
+    
+    local analysis = {
+        size = #code,
+        lines = select(2, string.gsub(code, '\n', '\n')) + 1,
+        obfuscationType = obfuscationType,
+        typeDetails = typeDetails,
+        patterns = {
+            functions = {},
+            variables = {},
+            strings = {},
+            numbers = {}
+        },
+        complexity = {
+            cyclomatic = 1, -- Básico
+            nesting_level = 0,
+            function_count = 0,
+            variable_count = 0
+        }
+    }
+    
+    -- Conta funções
+    for funcName in string.gmatch(code, "function%s+([%w_%.]+)%s*%(") do
+        table.insert(analysis.patterns.functions, funcName)
+        analysis.complexity.function_count = analysis.complexity.function_count + 1
+    end
+    
+    -- Conta variáveis locais
+    for varName in string.gmatch(code, "local%s+([%w_]+)%s*=") do
+        table.insert(analysis.patterns.variables, varName)
+        analysis.complexity.variable_count = analysis.complexity.variable_count + 1
+    end
+    
+    -- Conta strings
+    for str in string.gmatch(code, '"([^"]*)"') do
+        if #str > 0 then
+            table.insert(analysis.patterns.strings, str)
+        end
+    end
+    
+    -- Conta números
+    for num in string.gmatch(code, "(%d+%.?%d*)") do
+        table.insert(analysis.patterns.numbers, num)
+    end
+    
+    return analysis
+end
+
+-- Função para atualizar configurações
+function DeobfuscationModule:UpdateConfig(newConfig)
+    if type(newConfig) ~= "table" then
+        return false, "Configuração deve ser uma tabela"
+    end
+    
+    local updated = {}
+    for key, value in pairs(newConfig) do
+        if DeobfuscationModule.Config[key] ~= nil then
+            local oldValue = DeobfuscationModule.Config[key]
+            DeobfuscationModule.Config[key] = value
+            updated[key] = {old = oldValue, new = value}
+        end
+    end
+    
+    return true, updated
+end
+
+-- Função para obter configurações atuais
+function DeobfuscationModule:GetConfig()
+    local config = {}
+    for key, value in pairs(DeobfuscationModule.Config) do
+        config[key] = value
+    end
+    return config
+end
+
+-- Função para obter informações do módulo
+function DeobfuscationModule:GetInfo()
+    return DeobfuscationModule.Info
+end
+
+-- Função para verificar compatibilidade
+function DeobfuscationModule:CheckCompatibility()
+    local checks = {
+        lua_version = _VERSION or "Unknown",
+        string_lib = type(string.gsub) == "function",
+        math_lib = type(math.min) == "function",
+        os_lib = type(os.time) == "function",
+        table_lib = type(table.insert) == "function"
+    }
+    
+    local compatible = true
+    for _, check in pairs(checks) do
+        if not check then
+            compatible = false
+            break
+        end
+    end
+    
+    return compatible, checks
+end
+
+-- Função para resetar configurações para padrão
+function DeobfuscationModule:ResetConfig()
+    DeobfuscationModule.Config = {
+        maxStringLength = 10000,
+        enableAdvancedDeobfuscation = true,
+        detectObfuscationType = true,
+        processStringChars = true,
+        processCharArrays = true,
+        processMathOperations = true,
+        enablePatternDetection = true,
+        logChanges = true,
+        preserveComments = false,
+        formatOutput = true,
+        useCryptoKeys = true
+    }
+    return true
+end
+
+-- Log de inicialização
+if DeobfuscationModule.Config.logChanges then
+    print("🔓 DeobfuscationModule v" .. DeobfuscationModule.Info.Version .. " carregado com sucesso!")
+    print("📋 Métodos disponíveis:")
+    print("   - Deobfuscate(code, options)")
+    print("   - AnalyzeCode(code)")
+    print("   - DetectObfuscationType(code)")
+    print("   - InitializeCryptoKeys()")
+    print("   - GetLoadedKeys()")
+    print("   - AddCryptoKey(key, keyType)")
+    print("   - CheckCryptoKey(key, keyType)")
+    print("   - GenerateCustomKeys(pattern, count)")
+    print("   - GetCryptoKeysInfo()")
+    print("   - UpdateConfig(config)")
+    print("   - GetConfig()")
+    print("   - GetInfo()")
+    print("   - CheckCompatibility()")
+    print("   - ResetConfig()")
+    
+    -- Inicializa as chaves automaticamente
+    DeobfuscationModule:InitializeCryptoKeys()
+end
+
+return DeobfuscationModule
